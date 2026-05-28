@@ -35,6 +35,7 @@ def create_app(
             app_settings.database_url,
             pool_size=20,
             max_overflow=10,
+            pool_pre_ping=True,
         )
         SessionLocal.configure(bind=app.state.db_engine)
         app.state.redis = Redis.from_url(app_settings.redis_url, decode_responses=True)

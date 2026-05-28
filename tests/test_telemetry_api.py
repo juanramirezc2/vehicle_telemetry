@@ -33,7 +33,7 @@ class FakeSession:
 def valid_payload() -> dict[str, object]:
     return {
         "vehicle_id": "v-12",
-        "timestamp": "2026-05-28T12:00:00",
+        "timestamp": "2026-05-28T12:00:00.740Z",
         "lat": 37.41,
         "lon": -122.08,
         "battery_pct": 78,
@@ -64,6 +64,7 @@ def test_create_telemetry_event_returns_created_event() -> None:
     body = response.json()
     assert UUID(body["id"])
     assert body["vehicle_id"] == "v-12"
+    assert body["timestamp"] == "2026-05-28T12:00:00.740000"
     assert body["status"] == "moving"
     assert body["zone_entered"] is None
     assert body["received_at"] == "2026-05-28T12:00:01"
@@ -103,6 +104,24 @@ def test_create_telemetry_event_rejects_invalid_zone() -> None:
 def test_create_telemetry_event_rejects_invalid_battery() -> None:
     client = make_client(FakeSession())
     payload = valid_payload() | {"battery_pct": 101}
+
+    response = client.post("/api/telemetry", json=payload)
+
+    assert response.status_code == 422
+
+
+def test_create_telemetry_event_rejects_timestamp_without_z() -> None:
+    client = make_client(FakeSession())
+    payload = valid_payload() | {"timestamp": "2026-05-28T12:00:00.740"}
+
+    response = client.post("/api/telemetry", json=payload)
+
+    assert response.status_code == 422
+
+
+def test_create_telemetry_event_rejects_offset_timestamp() -> None:
+    client = make_client(FakeSession())
+    payload = valid_payload() | {"timestamp": "2026-05-28T12:00:00.740+00:00"}
 
     response = client.post("/api/telemetry", json=payload)
 
