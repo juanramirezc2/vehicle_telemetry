@@ -9,7 +9,6 @@ from backend.app.schemas import TelemetryEventCreate, TelemetryEventRead
 
 def valid_telemetry_payload() -> dict[str, object]:
     return {
-        "id": "event-1",
         "vehicle_id": "vehicle-1",
         "timestamp": datetime(2026, 5, 28, 12, 0, 0),
         "lat": 37.7749,
@@ -25,7 +24,7 @@ def valid_telemetry_payload() -> dict[str, object]:
 def test_telemetry_create_validates_valid_payload() -> None:
     telemetry = TelemetryEventCreate.model_validate(valid_telemetry_payload())
 
-    assert telemetry.id == "event-1"
+    assert telemetry.vehicle_id == "vehicle-1"
     assert telemetry.zone_entered == "aisle_a"
 
 

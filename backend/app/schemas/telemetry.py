@@ -18,7 +18,7 @@ class TelemetryEventBase(BaseModel):
 
 
 class TelemetryEventCreate(TelemetryEventBase):
-    id: str
+    pass
 
 
 class TelemetryEventRead(TelemetryEventBase):

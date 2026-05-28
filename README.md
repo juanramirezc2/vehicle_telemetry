@@ -17,6 +17,13 @@ Start Postgres and Redis:
 docker compose up -d postgres redis
 ```
 
+Run migrations and seed local vehicles:
+
+```bash
+uv run alembic upgrade head
+uv run python -m backend.app.seed_vehicles
+```
+
 Start the API:
 
 ```bash
