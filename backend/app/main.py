@@ -29,7 +29,11 @@ def create_app(
             yield
             return
 
-        app.state.db_engine = create_async_engine(app_settings.database_url)
+        app.state.db_engine = create_async_engine(
+            app_settings.database_url,
+            pool_size=20,
+            max_overflow=10,
+        )
         app.state.redis = Redis.from_url(app_settings.redis_url, decode_responses=True)
         try:
             yield
