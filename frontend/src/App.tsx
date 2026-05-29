@@ -1,28 +1,13 @@
 import { useEffect, useState } from "react";
 import { io, type Socket } from "socket.io-client";
+import { useAnomalyStore } from "./stores/anomalyStore";
 
 type ServiceState = "checking" | "online" | "offline";
-type LoadState = "idle" | "loading" | "success" | "error";
 
 type ServiceStatus = {
   label: string;
   path: string;
   state: ServiceState;
-};
-
-type Anomaly = {
-  id: string;
-  vehicle_id: string;
-  timestamp: string;
-  received_at: string;
-  lat: number;
-  lon: number;
-  battery_pct: number;
-  speed_mps: number;
-  status: string;
-  error_codes: string[];
-  zone_entered: string | null;
-  reasons: string[];
 };
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
@@ -62,9 +47,10 @@ async function checkService(path: string): Promise<ServiceState> {
 export default function App() {
   const [statuses, setStatuses] = useState<ServiceStatus[]>(initialStatuses);
   const [socketState, setSocketState] = useState<ServiceState>("checking");
-  const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
-  const [anomalyState, setAnomalyState] = useState<LoadState>("idle");
-  const [anomalyError, setAnomalyError] = useState<string | null>(null);
+  const anomalies = useAnomalyStore((store) => store.anomalies);
+  const anomalyState = useAnomalyStore((store) => store.state);
+  const anomalyError = useAnomalyStore((store) => store.error);
+  const fetchAnomalies = useAnomalyStore((store) => store.fetchAnomalies);
 
   useEffect(() => {
     let isMounted = true;
@@ -126,42 +112,8 @@ export default function App() {
   }, [socketState]);
 
   useEffect(() => {
-    const controller = new AbortController();
-
-    async function loadAnomalies() {
-      setAnomalyState("loading");
-      setAnomalyError(null);
-
-      try {
-        const response = await fetch(`${API_URL}/api/anomalies?limit=50`, {
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          throw new Error(`Anomaly request failed with ${response.status}`);
-        }
-
-        const data = (await response.json()) as Anomaly[];
-        setAnomalies(data);
-        setAnomalyState("success");
-      } catch (error) {
-        if (controller.signal.aborted) {
-          return;
-        }
-
-        setAnomalyState("error");
-        setAnomalyError(
-          error instanceof Error ? error.message : "Failed to load anomalies",
-        );
-      }
-    }
-
-    loadAnomalies();
-
-    return () => {
-      controller.abort();
-    };
-  }, []);
+    fetchAnomalies(50);
+  }, [fetchAnomalies]);
 
   return (
     <main className="min-h-screen bg-slate-950 px-4 py-8 text-slate-100 sm:px-6 lg:px-8">
