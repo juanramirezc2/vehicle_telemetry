@@ -1,6 +1,7 @@
 from backend.app.schemas.mission import MissionCreate, MissionRead
 from backend.app.schemas.telemetry import TelemetryEventCreate, TelemetryEventRead
 from backend.app.schemas.vehicle import VehicleCreate, VehicleRead
+from backend.app.schemas.zone import ZoneCountRead
 
 __all__ = [
     "MissionCreate",
@@ -9,4 +10,5 @@ __all__ = [
     "TelemetryEventRead",
     "VehicleCreate",
     "VehicleRead",
+    "ZoneCountRead",
 ]

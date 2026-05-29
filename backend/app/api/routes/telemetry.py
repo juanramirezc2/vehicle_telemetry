@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.core.database import get_session
 from backend.app.models import TelemetryEvent
 from backend.app.schemas import TelemetryEventCreate, TelemetryEventRead
+from backend.app.services.telemetry_service import InvalidVehicleError, ingest_telemetry
 
 router = APIRouter(tags=["telemetry"])
 
@@ -18,9 +19,7 @@ async def list_telemetry_events(
     session: AsyncSession = Depends(get_session),
 ) -> list[TelemetryEvent]:
     result = await session.execute(
-        select(TelemetryEvent)
-        .order_by(TelemetryEvent.timestamp.desc())
-        .limit(limit)
+        select(TelemetryEvent).order_by(TelemetryEvent.timestamp.desc()).limit(limit)
     )
     return list(result.scalars())
 
@@ -38,36 +37,32 @@ async def list_latest_events_by_vehicle(
 
 
 @router.post(
-    "/telemetry",
-    response_model=TelemetryEventRead,
-    status_code=status.HTTP_201_CREATED,
+    "/telemetry", response_model=TelemetryEventRead, status_code=status.HTTP_201_CREATED
 )
 async def create_telemetry_event(
     payload: TelemetryEventCreate,
     request: Request,
     session: AsyncSession = Depends(get_session),
-) -> TelemetryEvent:
-    telemetry = TelemetryEvent(
-        id=str(uuid4()),
-        **payload.model_dump(),
-    )
-
-    session.add(telemetry)
-
+) -> TelemetryEventRead:
     try:
-        await session.commit()
-    except IntegrityError as exc:
-        await session.rollback()
+        telemetry = await ingest_telemetry(session, payload)
+    except InvalidVehicleError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid vehicle_id",
         ) from exc
 
-    await session.refresh(telemetry)
+    response = TelemetryEventRead.model_validate(telemetry)
+
     socketio_server = getattr(request.app.state, "socketio", None)
     if socketio_server is not None:
         await socketio_server.emit(
-            "telemetry:created",
-            TelemetryEventRead.model_validate(telemetry).model_dump(mode="json"),
+            "telemetry:created", response.model_dump(mode="json")
         )
-    return telemetry
+        if payload.zone_entered is not None:
+            await socketio_server.emit(
+                "zones:count_changed",
+                {"zone_id": payload.zone_entered},
+            )
+
+    return response

@@ -3,8 +3,8 @@ from datetime import datetime
 import pytest
 from pydantic import ValidationError
 
-from backend.app.models import TelemetryEvent
-from backend.app.schemas import TelemetryEventCreate, TelemetryEventRead
+from backend.app.models import TelemetryEvent, ZoneCounter
+from backend.app.schemas import TelemetryEventCreate, TelemetryEventRead, ZoneCountRead
 
 
 def valid_telemetry_payload() -> dict[str, object]:
@@ -106,3 +106,29 @@ def test_telemetry_read_serializes_orm_instance() -> None:
 
     assert schema.id == "event-1"
     assert schema.received_at == received_at
+
+
+def test_zone_count_read_serializes_orm_instance() -> None:
+    updated_at = datetime(2026, 5, 28, 12, 0, 1)
+    zone_counter = ZoneCounter(
+        zone_id="charging_bay_1",
+        entry_count=12,
+        updated_at=updated_at,
+    )
+
+    schema = ZoneCountRead.model_validate(zone_counter)
+
+    assert schema.zone_id == "charging_bay_1"
+    assert schema.entry_count == 12
+    assert schema.updated_at == updated_at
+
+
+def test_zone_count_read_rejects_negative_entry_count() -> None:
+    with pytest.raises(ValidationError):
+        ZoneCountRead.model_validate(
+            {
+                "zone_id": "charging_bay_1",
+                "entry_count": -1,
+                "updated_at": None,
+            }
+        )

@@ -3,20 +3,33 @@ from datetime import datetime
 from uuid import UUID
 
 from fastapi.testclient import TestClient
-from sqlalchemy.exc import IntegrityError
-
 from backend.app.core.database import get_session
 from backend.app.main import create_app
 from backend.app.models import TelemetryEvent
 from backend.app.realtime import create_asgi_app
+from backend.app.services.telemetry_service import InvalidVehicleError
 
 
 class FakeResult:
-    def __init__(self, rows: list[TelemetryEvent]) -> None:
+    def __init__(self, rows: list[TelemetryEvent], scalar: TelemetryEvent | None = None) -> None:
         self.rows = rows
+        self.scalar = scalar
 
     def scalars(self) -> list[TelemetryEvent]:
         return self.rows
+
+    def scalar_one(self) -> TelemetryEvent:
+        if self.scalar is None:
+            raise AssertionError("Expected scalar result")
+        return self.scalar
+
+
+class FakeTransaction:
+    async def __aenter__(self) -> None:
+        return None
+
+    async def __aexit__(self, *args: object) -> None:
+        return None
 
 
 class FakeSession:
@@ -24,15 +37,36 @@ class FakeSession:
         self,
         *,
         execute_rows: list[TelemetryEvent] | None = None,
+        inserted_zone_entered: str | None = None,
         fail_commit: bool = False,
     ) -> None:
         self.execute_rows = execute_rows or []
+        self.inserted_zone_entered = inserted_zone_entered
         self.fail_commit = fail_commit
         self.added: TelemetryEvent | None = None
         self.rolled_back = False
 
     async def execute(self, statement: object) -> FakeResult:
+        if self.fail_commit:
+            raise InvalidVehicleError
+
+        if hasattr(statement, "is_insert") and statement.is_insert:
+            values = valid_payload() | {
+                "timestamp": datetime(2026, 5, 28, 12, 0, 0, 740000),
+                "zone_entered": self.inserted_zone_entered,
+            }
+            telemetry = TelemetryEvent(
+                id="00000000-0000-4000-8000-000000000001",
+                received_at=datetime(2026, 5, 28, 12, 0, 1),
+                **values,
+            )
+            self.added = telemetry
+            return FakeResult([], scalar=telemetry)
+
         return FakeResult(self.execute_rows)
+
+    def begin(self) -> FakeTransaction:
+        return FakeTransaction()
 
     def add(self, telemetry: TelemetryEvent) -> None:
         self.added = telemetry
@@ -188,7 +222,7 @@ def test_list_latest_events_by_vehicle_returns_one_event_per_vehicle() -> None:
 
 
 def test_create_telemetry_event_accepts_zone_entered() -> None:
-    session = FakeSession()
+    session = FakeSession(inserted_zone_entered="charging_bay_1")
     client = make_client(session)
     payload = valid_payload() | {"zone_entered": "charging_bay_1"}
 
@@ -279,7 +313,6 @@ def test_create_telemetry_event_returns_bad_request_for_invalid_vehicle() -> Non
 
     assert response.status_code == 400
     assert response.json() == {"detail": "Invalid vehicle_id"}
-    assert session.rolled_back is True
 
 
 def test_socketio_app_uses_dashboard_path() -> None:
