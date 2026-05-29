@@ -27,6 +27,7 @@ async def get_recent_anomalies(
     start: datetime | None = None,
     end: datetime | None = None,
     limit: int = 500,
+    distinct_vehicle: bool = False,
 ) -> list[TelemetryEvent]:
     statement = select(TelemetryEvent).where(
         or_(
@@ -42,7 +43,12 @@ async def get_recent_anomalies(
     if end is not None:
         statement = statement.where(TelemetryEvent.timestamp <= end)
 
-    result = await session.execute(
-        statement.order_by(TelemetryEvent.timestamp.desc()).limit(limit)
-    )
+    if distinct_vehicle:
+        statement = statement.distinct(TelemetryEvent.vehicle_id).order_by(
+            TelemetryEvent.vehicle_id, TelemetryEvent.timestamp.desc()
+        )
+    else:
+        statement = statement.order_by(TelemetryEvent.timestamp.desc())
+
+    result = await session.execute(statement.limit(limit))
     return list(result.scalars())

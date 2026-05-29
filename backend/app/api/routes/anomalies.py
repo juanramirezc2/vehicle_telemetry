@@ -35,12 +35,17 @@ async def list_anomalies(
     limit: int = Query(default=500, ge=1, le=5000),
     session: AsyncSession = Depends(get_session),
 ) -> list[AnomalyRead]:
+    start_dt = parse_query_timestamp(start, "start")
+    end_dt = parse_query_timestamp(end, "end")
+    distinct_vehicle = vehicle_id is None and start_dt is None and end_dt is None
+
     events = await get_recent_anomalies(
         session,
         vehicle_id=vehicle_id,
-        start=parse_query_timestamp(start, "start"),
-        end=parse_query_timestamp(end, "end"),
+        start=start_dt,
+        end=end_dt,
         limit=limit,
+        distinct_vehicle=distinct_vehicle,
     )
     return [
         anomaly_from_telemetry(event, detect_anomaly_reasons(event))

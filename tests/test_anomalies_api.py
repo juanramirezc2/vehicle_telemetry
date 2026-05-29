@@ -19,8 +19,10 @@ class FakeResult:
 class FakeSession:
     def __init__(self, rows: list[TelemetryEvent] | None = None) -> None:
         self.rows = rows or []
+        self.last_statement: object | None = None
 
     async def execute(self, statement: object) -> FakeResult:
+        self.last_statement = statement
         return FakeResult(self.rows)
 
 
@@ -67,7 +69,7 @@ def test_list_anomalies_returns_derived_reasons() -> None:
     )
     client = make_client(session)
 
-    response = client.get("/api/anomalies?limit=3")
+    response = client.get("/api/anomalies?vehicle_id=v-12&limit=3")
 
     assert response.status_code == 200
     body = response.json()
@@ -75,6 +77,24 @@ def test_list_anomalies_returns_derived_reasons() -> None:
     assert body[0]["reasons"] == ["low_battery"]
     assert body[1]["reasons"] == ["overspeed"]
     assert body[2]["reasons"] == ["low_battery", "overspeed"]
+
+
+def test_list_anomalies_deduplicates_by_vehicle_when_no_params() -> None:
+    session = FakeSession(
+        [
+            anomaly_event(event_id="old", battery_pct=4.9, timestamp=datetime(2026, 5, 28, 11, 0, 0)),
+            anomaly_event(event_id="new", battery_pct=3.0, timestamp=datetime(2026, 5, 28, 12, 0, 0)),
+            anomaly_event(event_id="other", vehicle_id="v-5", speed_mps=6.0),
+        ]
+    )
+    client = make_client(session)
+
+    response = client.get("/api/anomalies")
+
+    assert response.status_code == 200
+    from sqlalchemy.dialects.postgresql import dialect as pg_dialect
+    compiled = session.last_statement.compile(dialect=pg_dialect())
+    assert "DISTINCT ON" in str(compiled).upper()
 
 
 def test_list_anomalies_accepts_utc_z_time_range() -> None:
