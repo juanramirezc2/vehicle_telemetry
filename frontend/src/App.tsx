@@ -1,73 +1,73 @@
-import { useEffect, useState } from 'react'
-import { io, type Socket } from 'socket.io-client'
+import { useEffect, useState } from "react";
+import { io, type Socket } from "socket.io-client";
 
-type ServiceState = 'checking' | 'online' | 'offline'
-type LoadState = 'idle' | 'loading' | 'success' | 'error'
+type ServiceState = "checking" | "online" | "offline";
+type LoadState = "idle" | "loading" | "success" | "error";
 
 type ServiceStatus = {
-  label: string
-  path: string
-  state: ServiceState
-}
+  label: string;
+  path: string;
+  state: ServiceState;
+};
 
 type Anomaly = {
-  id: string
-  vehicle_id: string
-  timestamp: string
-  received_at: string
-  lat: number
-  lon: number
-  battery_pct: number
-  speed_mps: number
-  status: string
-  error_codes: string[]
-  zone_entered: string | null
-  reasons: string[]
-}
+  id: string;
+  vehicle_id: string;
+  timestamp: string;
+  received_at: string;
+  lat: number;
+  lon: number;
+  battery_pct: number;
+  speed_mps: number;
+  status: string;
+  error_codes: string[];
+  zone_entered: string | null;
+  reasons: string[];
+};
 
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
-const SOCKET_PATH = '/dashboard.io'
+const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+const SOCKET_PATH = "/dashboard.io";
 
 const initialStatuses: ServiceStatus[] = [
-  { label: 'API', path: '/api/health', state: 'checking' },
-  { label: 'Postgres', path: '/api/health/db', state: 'checking' },
-  { label: 'Redis', path: '/api/health/redis', state: 'checking' },
-  { label: 'Socket.IO', path: SOCKET_PATH, state: 'checking' },
-]
+  { label: "API", path: "/api/health", state: "checking" },
+  { label: "Postgres", path: "/api/health/db", state: "checking" },
+  { label: "Redis", path: "/api/health/redis", state: "checking" },
+  { label: "Socket.IO", path: SOCKET_PATH, state: "checking" },
+];
 
 const healthStatuses = initialStatuses.filter(
   (service) => service.path !== SOCKET_PATH,
-)
+);
 
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'medium',
-  }).format(new Date(value))
+    dateStyle: "medium",
+    timeStyle: "medium",
+  }).format(new Date(value));
 }
 
 function formatReason(reason: string) {
-  return reason.replaceAll('_', ' ')
+  return reason.replaceAll("_", " ");
 }
 
 async function checkService(path: string): Promise<ServiceState> {
   try {
-    const response = await fetch(`${API_URL}${path}`)
-    return response.ok ? 'online' : 'offline'
+    const response = await fetch(`${API_URL}${path}`);
+    return response.ok ? "online" : "offline";
   } catch {
-    return 'offline'
+    return "offline";
   }
 }
 
 export default function App() {
-  const [statuses, setStatuses] = useState<ServiceStatus[]>(initialStatuses)
-  const [socketState, setSocketState] = useState<ServiceState>('checking')
-  const [anomalies, setAnomalies] = useState<Anomaly[]>([])
-  const [anomalyState, setAnomalyState] = useState<LoadState>('idle')
-  const [anomalyError, setAnomalyError] = useState<string | null>(null)
+  const [statuses, setStatuses] = useState<ServiceStatus[]>(initialStatuses);
+  const [socketState, setSocketState] = useState<ServiceState>("checking");
+  const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
+  const [anomalyState, setAnomalyState] = useState<LoadState>("idle");
+  const [anomalyError, setAnomalyError] = useState<string | null>(null);
 
   useEffect(() => {
-    let isMounted = true
+    let isMounted = true;
 
     async function loadStatuses() {
       const nextStatuses = await Promise.all(
@@ -75,45 +75,45 @@ export default function App() {
           ...service,
           state: await checkService(service.path),
         })),
-      )
+      );
 
       if (isMounted) {
         setStatuses([
           ...nextStatuses,
-          { label: 'Socket.IO', path: SOCKET_PATH, state: socketState },
-        ])
+          { label: "Socket.IO", path: SOCKET_PATH, state: socketState },
+        ]);
       }
     }
 
-    loadStatuses()
+    loadStatuses();
 
     return () => {
-      isMounted = false
-    }
-  }, [])
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     const socket: Socket = io(API_URL, {
       path: SOCKET_PATH,
-      transports: ['websocket'],
-    })
+      transports: ["websocket"],
+    });
 
-    socket.on('connect', () => {
-      setSocketState('online')
-    })
+    socket.on("connect", () => {
+      setSocketState("online");
+    });
 
-    socket.on('connect_error', () => {
-      setSocketState('offline')
-    })
+    socket.on("connect_error", () => {
+      setSocketState("offline");
+    });
 
-    socket.on('disconnect', () => {
-      setSocketState('offline')
-    })
+    socket.on("disconnect", () => {
+      setSocketState("offline");
+    });
 
     return () => {
-      socket.disconnect()
-    }
-  }, [])
+      socket.disconnect();
+    };
+  }, []);
 
   useEffect(() => {
     setStatuses((currentStatuses) =>
@@ -122,46 +122,46 @@ export default function App() {
           ? { ...service, state: socketState }
           : service,
       ),
-    )
-  }, [socketState])
+    );
+  }, [socketState]);
 
   useEffect(() => {
-    const controller = new AbortController()
+    const controller = new AbortController();
 
     async function loadAnomalies() {
-      setAnomalyState('loading')
-      setAnomalyError(null)
+      setAnomalyState("loading");
+      setAnomalyError(null);
 
       try {
-        const response = await fetch(`${API_URL}/api/anomalies?limit=25`, {
+        const response = await fetch(`${API_URL}/api/anomalies?limit=50`, {
           signal: controller.signal,
-        })
+        });
 
         if (!response.ok) {
-          throw new Error(`Anomaly request failed with ${response.status}`)
+          throw new Error(`Anomaly request failed with ${response.status}`);
         }
 
-        const data = (await response.json()) as Anomaly[]
-        setAnomalies(data)
-        setAnomalyState('success')
+        const data = (await response.json()) as Anomaly[];
+        setAnomalies(data);
+        setAnomalyState("success");
       } catch (error) {
         if (controller.signal.aborted) {
-          return
+          return;
         }
 
-        setAnomalyState('error')
+        setAnomalyState("error");
         setAnomalyError(
-          error instanceof Error ? error.message : 'Failed to load anomalies',
-        )
+          error instanceof Error ? error.message : "Failed to load anomalies",
+        );
       }
     }
 
-    loadAnomalies()
+    loadAnomalies();
 
     return () => {
-      controller.abort()
-    }
-  }, [])
+      controller.abort();
+    };
+  }, []);
 
   return (
     <main className="min-h-screen bg-slate-950 px-4 py-8 text-slate-100 sm:px-6 lg:px-8">
@@ -176,8 +176,9 @@ export default function App() {
                 Anomaly dashboard
               </h1>
               <p className="mt-4 max-w-2xl text-base leading-7 text-slate-300">
-                Monitor derived telemetry anomalies from low battery and overspeed
-                events. Data is loaded from the FastAPI anomaly endpoint.
+                Monitor derived telemetry anomalies from low battery and
+                overspeed events. Data is loaded from the FastAPI anomaly
+                endpoint.
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:min-w-[520px]">
@@ -186,14 +187,16 @@ export default function App() {
                   className="rounded-2xl border border-white/10 bg-white/[0.06] p-4 shadow-lg shadow-black/10 backdrop-blur"
                   key={service.path}
                 >
-                  <p className="text-xs font-medium text-slate-400">{service.label}</p>
+                  <p className="text-xs font-medium text-slate-400">
+                    {service.label}
+                  </p>
                   <p
                     className={`mt-3 inline-flex rounded-full px-2.5 py-1 text-xs font-bold uppercase tracking-wide ${
-                      service.state === 'online'
-                        ? 'bg-emerald-400/15 text-emerald-300'
-                        : service.state === 'offline'
-                          ? 'bg-rose-400/15 text-rose-300'
-                          : 'bg-slate-400/15 text-slate-300'
+                      service.state === "online"
+                        ? "bg-emerald-400/15 text-emerald-300"
+                        : service.state === "offline"
+                          ? "bg-rose-400/15 text-rose-300"
+                          : "bg-slate-400/15 text-slate-300"
                     }`}
                   >
                     {service.state}
@@ -215,13 +218,13 @@ export default function App() {
               </h2>
             </div>
             <div className="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">
-              {anomalyState === 'loading'
-                ? 'Loading anomalies'
+              {anomalyState === "loading"
+                ? "Loading anomalies"
                 : `${anomalies.length} anomalies`}
             </div>
           </div>
 
-          {anomalyState === 'error' ? (
+          {anomalyState === "error" ? (
             <div className="m-6 rounded-2xl border border-rose-200 bg-rose-50 p-5 text-rose-800">
               {anomalyError}
             </div>
@@ -242,7 +245,10 @@ export default function App() {
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
                 {anomalies.map((anomaly) => (
-                  <tr className="transition hover:bg-cyan-50/60" key={anomaly.id}>
+                  <tr
+                    className="transition hover:bg-cyan-50/60"
+                    key={anomaly.id}
+                  >
                     <td className="whitespace-nowrap px-5 py-4 font-bold text-slate-950">
                       {anomaly.vehicle_id}
                     </td>
@@ -268,7 +274,7 @@ export default function App() {
                       {anomaly.status}
                     </td>
                     <td className="whitespace-nowrap px-5 py-4 text-slate-600">
-                      {anomaly.zone_entered ?? 'none'}
+                      {anomaly.zone_entered ?? "none"}
                     </td>
                     <td className="whitespace-nowrap px-5 py-4 text-slate-600">
                       {formatDateTime(anomaly.timestamp)}
@@ -279,16 +285,18 @@ export default function App() {
             </table>
           </div>
 
-          {anomalyState === 'success' && anomalies.length === 0 ? (
+          {anomalyState === "success" && anomalies.length === 0 ? (
             <div className="p-10 text-center text-slate-500">
               No anomaly telemetry has been reported yet.
             </div>
           ) : null}
-          {anomalyState === 'loading' ? (
-            <div className="p-10 text-center text-slate-500">Loading anomaly data...</div>
+          {anomalyState === "loading" ? (
+            <div className="p-10 text-center text-slate-500">
+              Loading anomaly data...
+            </div>
           ) : null}
         </section>
       </div>
     </main>
-  )
+  );
 }
