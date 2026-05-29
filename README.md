@@ -28,7 +28,7 @@ Start the API:
 
 ```bash
 uv sync
-uv run fastapi dev backend/app/main.py
+uv run uvicorn backend.app.main:app --reload
 ```
 
 Start the frontend:
