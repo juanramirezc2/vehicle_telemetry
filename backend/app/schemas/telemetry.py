@@ -10,6 +10,14 @@ UTC_TIMESTAMP_PATTERN = re.compile(
 )
 
 
+def parse_utc_timestamp(value: str) -> datetime:
+    if not isinstance(value, str) or not UTC_TIMESTAMP_PATTERN.fullmatch(value):
+        raise ValueError("timestamp must be a UTC date-time string ending in Z")
+
+    timestamp = datetime.fromisoformat(f"{value[:-1]}+00:00")
+    return timestamp.astimezone(timezone.utc).replace(tzinfo=None)
+
+
 class TelemetryEventBase(BaseModel):
     vehicle_id: str
     timestamp: datetime
@@ -42,11 +50,7 @@ class TelemetryEventCreate(TelemetryEventBase):
     @field_validator("timestamp", mode="before")
     @classmethod
     def parse_utc_timestamp(cls, value: str) -> datetime:
-        if not isinstance(value, str) or not UTC_TIMESTAMP_PATTERN.fullmatch(value):
-            raise ValueError("timestamp must be a UTC date-time string ending in Z")
-
-        timestamp = datetime.fromisoformat(f"{value[:-1]}+00:00")
-        return timestamp.astimezone(timezone.utc).replace(tzinfo=None)
+        return parse_utc_timestamp(value)
 
 
 class TelemetryEventRead(TelemetryEventBase):

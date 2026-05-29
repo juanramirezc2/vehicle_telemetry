@@ -37,10 +37,14 @@ class FakeSession:
         self,
         *,
         execute_rows: list[TelemetryEvent] | None = None,
+        inserted_battery_pct: float = 78,
+        inserted_speed_mps: float = 1.2,
         inserted_zone_entered: str | None = None,
         fail_commit: bool = False,
     ) -> None:
         self.execute_rows = execute_rows or []
+        self.inserted_battery_pct = inserted_battery_pct
+        self.inserted_speed_mps = inserted_speed_mps
         self.inserted_zone_entered = inserted_zone_entered
         self.fail_commit = fail_commit
         self.added: TelemetryEvent | None = None
@@ -53,6 +57,8 @@ class FakeSession:
         if hasattr(statement, "is_insert") and statement.is_insert:
             values = valid_payload() | {
                 "timestamp": datetime(2026, 5, 28, 12, 0, 0, 740000),
+                "battery_pct": self.inserted_battery_pct,
+                "speed_mps": self.inserted_speed_mps,
                 "zone_entered": self.inserted_zone_entered,
             }
             telemetry = TelemetryEvent(
@@ -258,6 +264,58 @@ def test_create_telemetry_event_broadcasts_created_event() -> None:
             },
         )
     ]
+
+
+def test_create_telemetry_event_broadcasts_low_battery_anomaly() -> None:
+    session = FakeSession(inserted_battery_pct=4.9)
+    socket_server = FakeSocketServer()
+    client = make_client_with_socket(session, socket_server)
+    payload = valid_payload() | {"battery_pct": 4.9}
+
+    response = client.post("/api/telemetry", json=payload)
+
+    assert response.status_code == 201
+    assert socket_server.emitted[1] == (
+        "anomaly:detected",
+        {
+            "id": response.json()["id"],
+            "vehicle_id": "v-12",
+            "timestamp": "2026-05-28T12:00:00.740000",
+            "lat": 37.41,
+            "lon": -122.08,
+            "battery_pct": 4.9,
+            "speed_mps": 1.2,
+            "status": "moving",
+            "error_codes": [],
+            "zone_entered": None,
+            "received_at": "2026-05-28T12:00:01",
+            "reasons": ["low_battery"],
+        },
+    )
+
+
+def test_create_telemetry_event_broadcasts_overspeed_anomaly() -> None:
+    session = FakeSession(inserted_speed_mps=5.1)
+    socket_server = FakeSocketServer()
+    client = make_client_with_socket(session, socket_server)
+    payload = valid_payload() | {"speed_mps": 5.1}
+
+    response = client.post("/api/telemetry", json=payload)
+
+    assert response.status_code == 201
+    assert socket_server.emitted[1][0] == "anomaly:detected"
+    assert socket_server.emitted[1][1]["reasons"] == ["overspeed"]
+
+
+def test_create_telemetry_event_does_not_broadcast_normal_anomaly() -> None:
+    session = FakeSession()
+    socket_server = FakeSocketServer()
+    client = make_client_with_socket(session, socket_server)
+
+    response = client.post("/api/telemetry", json=valid_payload())
+
+    assert response.status_code == 201
+    assert [event for event, _data in socket_server.emitted] == ["telemetry:created"]
 
 
 def test_create_telemetry_event_rejects_invalid_status() -> None:

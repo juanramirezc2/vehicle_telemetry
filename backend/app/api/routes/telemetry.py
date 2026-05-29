@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.core.database import get_session
 from backend.app.models import TelemetryEvent
 from backend.app.schemas import TelemetryEventCreate, TelemetryEventRead
+from backend.app.services.anomaly_service import detect_anomaly_reasons
 from backend.app.services.telemetry_service import InvalidVehicleError, ingest_telemetry
 
 router = APIRouter(tags=["telemetry"])
@@ -56,13 +57,20 @@ async def create_telemetry_event(
 
     socketio_server = getattr(request.app.state, "socketio", None)
     if socketio_server is not None:
+        telemetry_payload = response.model_dump(mode="json")
         await socketio_server.emit(
-            "telemetry:created", response.model_dump(mode="json")
+            "telemetry:created", telemetry_payload
         )
         if payload.zone_entered is not None:
             await socketio_server.emit(
                 "zones:count_changed",
                 {"zone_id": payload.zone_entered},
+            )
+        reasons = detect_anomaly_reasons(response)
+        if reasons:
+            await socketio_server.emit(
+                "anomaly:detected",
+                telemetry_payload | {"reasons": reasons},
             )
 
     return response
