@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { io, type Socket } from 'socket.io-client'
 
 type ServiceState = 'checking' | 'online' | 'offline'
 
@@ -9,12 +10,18 @@ type ServiceStatus = {
 }
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+const SOCKET_PATH = '/dashboard.io'
 
 const initialStatuses: ServiceStatus[] = [
   { label: 'API', path: '/api/health', state: 'checking' },
   { label: 'Postgres', path: '/api/health/db', state: 'checking' },
   { label: 'Redis', path: '/api/health/redis', state: 'checking' },
+  { label: 'Socket.IO', path: SOCKET_PATH, state: 'checking' },
 ]
+
+const healthStatuses = initialStatuses.filter(
+  (service) => service.path !== SOCKET_PATH,
+)
 
 async function checkService(path: string): Promise<ServiceState> {
   try {
@@ -27,20 +34,21 @@ async function checkService(path: string): Promise<ServiceState> {
 
 export default function App() {
   const [statuses, setStatuses] = useState<ServiceStatus[]>(initialStatuses)
+  const [socketState, setSocketState] = useState<ServiceState>('checking')
 
   useEffect(() => {
     let isMounted = true
 
     async function loadStatuses() {
       const nextStatuses = await Promise.all(
-        initialStatuses.map(async (service) => ({
+        healthStatuses.map(async (service) => ({
           ...service,
           state: await checkService(service.path),
         })),
       )
 
       if (isMounted) {
-        setStatuses(nextStatuses)
+        setStatuses([...nextStatuses, { label: 'Socket.IO', path: SOCKET_PATH, state: socketState }])
       }
     }
 
@@ -50,6 +58,39 @@ export default function App() {
       isMounted = false
     }
   }, [])
+
+  useEffect(() => {
+    const socket: Socket = io(API_URL, {
+      path: SOCKET_PATH,
+      transports: ['websocket'],
+    })
+
+    socket.on('connect', () => {
+      setSocketState('online')
+    })
+
+    socket.on('connect_error', () => {
+      setSocketState('offline')
+    })
+
+    socket.on('disconnect', () => {
+      setSocketState('offline')
+    })
+
+    return () => {
+      socket.disconnect()
+    }
+  }, [])
+
+  useEffect(() => {
+    setStatuses((currentStatuses) =>
+      currentStatuses.map((service) =>
+        service.path === SOCKET_PATH
+          ? { ...service, state: socketState }
+          : service,
+      ),
+    )
+  }, [socketState])
 
   return (
     <main className="app-shell">

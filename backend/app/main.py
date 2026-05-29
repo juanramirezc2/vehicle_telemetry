@@ -11,6 +11,7 @@ from backend.app.api.health import router as health_router
 from backend.app.api.routes.telemetry import router as telemetry_router
 from backend.app.core.config import Settings, get_settings
 from backend.app.core.database import SessionLocal
+from backend.app.realtime import create_asgi_app
 from backend.app.services.health import check_database, check_redis
 
 HealthCheck = Callable[[FastAPI], Awaitable[None]]
@@ -72,4 +73,5 @@ def create_app(
     return app
 
 
-app = create_app()
+fastapi_app = create_app()
+app = create_asgi_app(fastapi_app, fastapi_app.state.settings)
