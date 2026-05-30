@@ -1,6 +1,6 @@
-# qualitara
+# Fleet Dashboard for Vehicles Telemetry
 
-Modern FastAPI + React TypeScript scaffold for Qualitara.
+Modern FastAPI + React TypeScript fleet dashboard for vehicles telemetry.
 
 ## Stack
 
