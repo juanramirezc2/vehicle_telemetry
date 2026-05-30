@@ -6,7 +6,8 @@
 
 2. What constraints or requirements were **unclear** in this spec, and what did you assume? (Deliberately — the spec leaves things open.)
 
-- **Status updates are derived from telemetry**, not a separate operation. Telemetry events carry status; the ingest path detects transitions. The PATCH endpoint is a manual override sharing the same service logic.
+- **telemetry endpoint being the source of truth**, not clearly specified but i assumed Telemetry events were the source of truth for status, Anomalies and entry zones data.
+
 - **Anomalies** are single events violating an operational invariant (battery, speed, status/motion mismatch). Stateless rules, inline during ingest. Thresholds are placeholders.
 - **The fleet is fixed and seeded at startup**, like zones. Unknown `vehicle_id` is a 400, not an auto-register.
 
