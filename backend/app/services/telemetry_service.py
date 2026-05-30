@@ -1,7 +1,8 @@
 from sqlalchemy import insert, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from typing import NamedTuple
 
-from backend.app.models import TelemetryEvent, ZoneCounter
+from backend.app.models import TelemetryEvent, Vehicle, ZoneCounter
 from backend.app.schemas.telemetry import TelemetryEventCreate, TelemetryEventRead
 from backend.app.services.vehicle_service import (
     VehicleNotFoundError,
@@ -13,10 +14,15 @@ class InvalidVehicleError(Exception):
     """Raised when a telemetry event references a vehicle_id that doesn't exist."""
 
 
+class TelemetryIngestResult(NamedTuple):
+    telemetry: TelemetryEventRead
+    changed_vehicle: Vehicle | None
+
+
 async def ingest_telemetry(
     session: AsyncSession,
     event: TelemetryEventCreate,
-) -> TelemetryEventRead:
+) -> TelemetryIngestResult:
     """
     Persist a telemetry event and, if it represents a zone crossing,
     atomically increment the corresponding zone counter.
@@ -27,6 +33,8 @@ async def ingest_telemetry(
     atomically under a row-level lock, so concurrent crossings of the
     same zone serialize correctly without losing entries.
     """
+    changed_vehicle: Vehicle | None = None
+
     async with session.begin():
         # 1. Insert the telemetry event, get the stored row back.
         result = await session.execute(
@@ -38,7 +46,7 @@ async def ingest_telemetry(
 
         if event.status == "fault":
             try:
-                await apply_status_change(
+                changed_vehicle = await apply_status_change(
                     session,
                     event.vehicle_id,
                     "fault",
@@ -59,4 +67,7 @@ async def ingest_telemetry(
                 )
             )
 
-    return TelemetryEventRead.model_validate(stored)
+    return TelemetryIngestResult(
+        telemetry=TelemetryEventRead.model_validate(stored),
+        changed_vehicle=changed_vehicle,
+    )

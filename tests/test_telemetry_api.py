@@ -334,6 +334,39 @@ def test_create_fault_telemetry_is_idempotent_when_vehicle_already_fault() -> No
     assert session.maintenance_records == []
 
 
+def test_create_fault_telemetry_broadcasts_vehicle_status_change() -> None:
+    session = FakeSession(inserted_status="fault")
+    socket_server = FakeSocketServer()
+    client = make_client_with_socket(session, socket_server)
+    payload = valid_payload() | {"status": "fault"}
+
+    response = client.post("/api/telemetry", json=payload)
+
+    assert response.status_code == 201
+    assert socket_server.emitted[1] == (
+        "vehicles:status_changed",
+        {
+            "id": "v-12",
+            "status": "fault",
+            "battery": 78.0,
+            "current_zone": None,
+            "updated_at": "2026-05-28T12:00:00",
+        },
+    )
+
+
+def test_create_fault_telemetry_does_not_broadcast_status_when_unchanged() -> None:
+    session = FakeSession(inserted_status="fault", vehicle_status="fault")
+    socket_server = FakeSocketServer()
+    client = make_client_with_socket(session, socket_server)
+    payload = valid_payload() | {"status": "fault"}
+
+    response = client.post("/api/telemetry", json=payload)
+
+    assert response.status_code == 201
+    assert [event for event, _data in socket_server.emitted] == ["telemetry:created"]
+
+
 def test_create_telemetry_event_broadcasts_low_battery_anomaly() -> None:
     session = FakeSession(inserted_battery_pct=4.9)
     socket_server = FakeSocketServer()

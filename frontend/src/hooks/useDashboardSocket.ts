@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { io, type Socket } from "socket.io-client";
 import { type Anomaly, useAnomalyStore } from "../stores/anomalyStore";
+import { type Vehicle, useVehiclesStore } from "../stores/vehiclesStore";
 import { useZonesStore } from "../stores/zonesStore";
 
 type ZoneCountChangedEvent = {
@@ -12,6 +13,7 @@ const SOCKET_PATH = "/dashboard.io";
 
 export function useDashboardSocket() {
   const upsertAnomaly = useAnomalyStore((store) => store.upsertAnomaly);
+  const upsertVehicle = useVehiclesStore((store) => store.upsertVehicle);
   const incrementZoneCount = useZonesStore((store) => store.incrementZoneCount);
 
   useEffect(() => {
@@ -28,10 +30,15 @@ export function useDashboardSocket() {
       incrementZoneCount(event.zone_id);
     });
 
+    socket.on("vehicles:status_changed", (vehicle: Vehicle) => {
+      upsertVehicle(vehicle);
+    });
+
     return () => {
       socket.off("anomaly:detected");
       socket.off("zones:count_changed");
+      socket.off("vehicles:status_changed");
       socket.disconnect();
     };
-  }, [incrementZoneCount, upsertAnomaly]);
+  }, [incrementZoneCount, upsertAnomaly, upsertVehicle]);
 }

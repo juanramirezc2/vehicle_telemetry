@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.database import get_session
 from backend.app.models import TelemetryEvent
-from backend.app.schemas import TelemetryEventCreate, TelemetryEventRead
+from backend.app.schemas import TelemetryEventCreate, TelemetryEventRead, VehicleRead
 from backend.app.services.anomaly_service import detect_anomaly_reasons
 from backend.app.services.telemetry_service import InvalidVehicleError, ingest_telemetry
 
@@ -45,14 +45,14 @@ async def create_telemetry_event(
     session: AsyncSession = Depends(get_session),
 ) -> TelemetryEventRead:
     try:
-        telemetry = await ingest_telemetry(session, payload)
+        result = await ingest_telemetry(session, payload)
     except InvalidVehicleError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid vehicle_id",
         ) from exc
 
-    response = TelemetryEventRead.model_validate(telemetry)
+    response = TelemetryEventRead.model_validate(result.telemetry)
 
     socketio_server = getattr(request.app.state, "socketio", None)
     if socketio_server is not None:
@@ -62,6 +62,11 @@ async def create_telemetry_event(
             await socketio_server.emit(
                 "zones:count_changed",
                 {"zone_id": payload.zone_entered},
+            )
+        if result.changed_vehicle is not None:
+            await socketio_server.emit(
+                "vehicles:status_changed",
+                VehicleRead.model_validate(result.changed_vehicle).model_dump(mode="json"),
             )
         reasons = detect_anomaly_reasons(response)
         if reasons:

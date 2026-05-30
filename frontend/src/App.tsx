@@ -10,6 +10,7 @@ import {
 } from "recharts";
 import { useDashboardSocket } from "./hooks/useDashboardSocket";
 import { useAnomalyStore } from "./stores/anomalyStore";
+import { useVehiclesStore } from "./stores/vehiclesStore";
 import { useZonesStore } from "./stores/zonesStore";
 
 function formatDateTime(value: string) {
@@ -29,6 +30,10 @@ export default function App() {
   const anomalyState = useAnomalyStore((store) => store.state);
   const anomalyError = useAnomalyStore((store) => store.error);
   const fetchAnomalies = useAnomalyStore((store) => store.fetchAnomalies);
+  const vehicles = useVehiclesStore((store) => store.vehicles);
+  const vehiclesState = useVehiclesStore((store) => store.state);
+  const vehiclesError = useVehiclesStore((store) => store.error);
+  const fetchVehicles = useVehiclesStore((store) => store.fetchVehicles);
   const zones = useZonesStore((store) => store.zones);
   const zonesState = useZonesStore((store) => store.state);
   const zonesError = useZonesStore((store) => store.error);
@@ -37,6 +42,10 @@ export default function App() {
   useEffect(() => {
     fetchAnomalies(50);
   }, [fetchAnomalies]);
+
+  useEffect(() => {
+    fetchVehicles();
+  }, [fetchVehicles]);
 
   useEffect(() => {
     fetchZones();
@@ -130,6 +139,91 @@ export default function App() {
           {anomalyState === "loading" ? (
             <div className="p-10 text-center text-slate-500">
               Loading anomaly data...
+            </div>
+          ) : null}
+        </section>
+
+        <section className="rounded-3xl border border-slate-200 bg-white text-slate-950 shadow-xl shadow-slate-950/10">
+          <div className="flex flex-col gap-4 border-b border-slate-200 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+            <div className="max-w-3xl">
+              <p className="text-sm font-semibold uppercase tracking-[0.25em] text-cyan-700">
+                Fleet status
+              </p>
+              <h2 className="mt-2 text-2xl font-black tracking-tight">
+                Vehicles
+              </h2>
+            </div>
+            <div className="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">
+              {vehiclesState === "loading"
+                ? "Loading vehicles"
+                : `${vehicles.length} vehicles`}
+            </div>
+          </div>
+
+          {vehiclesState === "error" ? (
+            <div className="m-6 rounded-2xl border border-rose-200 bg-rose-50 p-5 text-rose-800">
+              {vehiclesError}
+            </div>
+          ) : null}
+
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
+              <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
+                <tr>
+                  <th className="px-5 py-4 font-bold">Vehicle</th>
+                  <th className="px-5 py-4 font-bold">Status</th>
+                  <th className="px-5 py-4 font-bold">Battery</th>
+                  <th className="px-5 py-4 font-bold">Current zone</th>
+                  <th className="px-5 py-4 font-bold">Updated</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 bg-white">
+                {vehicles.map((vehicle) => (
+                  <tr
+                    className="transition hover:bg-cyan-50/60"
+                    key={vehicle.id}
+                  >
+                    <td className="whitespace-nowrap px-5 py-4 font-bold text-slate-950">
+                      {vehicle.id}
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-4">
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-xs font-bold uppercase tracking-wide ${
+                          vehicle.status === "fault"
+                            ? "bg-rose-100 text-rose-800"
+                            : vehicle.status === "charging"
+                              ? "bg-sky-100 text-sky-800"
+                              : vehicle.status === "moving"
+                                ? "bg-emerald-100 text-emerald-800"
+                                : "bg-slate-100 text-slate-700"
+                        }`}
+                      >
+                        {vehicle.status}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-4 font-semibold text-slate-700">
+                      {vehicle.battery.toFixed(1)}%
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-4 text-slate-600">
+                      {vehicle.current_zone ?? "none"}
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-4 text-slate-600">
+                      {formatDateTime(vehicle.updated_at)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {vehiclesState === "success" && vehicles.length === 0 ? (
+            <div className="p-10 text-center text-slate-500">
+              No vehicles have been reported yet.
+            </div>
+          ) : null}
+          {vehiclesState === "loading" ? (
+            <div className="p-10 text-center text-slate-500">
+              Loading vehicle data...
             </div>
           ) : null}
         </section>
