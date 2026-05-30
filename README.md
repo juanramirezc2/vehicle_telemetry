@@ -82,3 +82,7 @@ Build the frontend:
 cd frontend
 npm run build
 ```
+
+## Session History
+
+See [opencode_session_history.md](opencode_session_history.md) for the development session log.
