@@ -3,8 +3,14 @@ from datetime import datetime
 import pytest
 from pydantic import ValidationError
 
-from backend.app.models import TelemetryEvent, ZoneCounter
-from backend.app.schemas import TelemetryEventCreate, TelemetryEventRead, ZoneCountRead
+from backend.app.models import MaintenanceRecord, Mission, TelemetryEvent, ZoneCounter
+from backend.app.schemas import (
+    MaintenanceRecordRead,
+    MissionRead,
+    TelemetryEventCreate,
+    TelemetryEventRead,
+    ZoneCountRead,
+)
 
 
 def valid_telemetry_payload() -> dict[str, object]:
@@ -132,3 +138,41 @@ def test_zone_count_read_rejects_negative_entry_count() -> None:
                 "updated_at": None,
             }
         )
+
+
+def test_mission_read_serializes_lifecycle_fields() -> None:
+    started_at = datetime(2026, 5, 28, 12, 0, 0)
+    cancelled_at = datetime(2026, 5, 28, 12, 10, 0)
+    mission = Mission(
+        id="mission-1",
+        vehicle_id="vehicle-1",
+        status="cancelled",
+        started_at=started_at,
+        cancelled_at=cancelled_at,
+        cancel_reason="vehicle fault",
+    )
+
+    schema = MissionRead.model_validate(mission)
+
+    assert schema.started_at == started_at
+    assert schema.cancelled_at == cancelled_at
+    assert schema.cancel_reason == "vehicle fault"
+
+
+def test_maintenance_record_read_serializes_orm_instance() -> None:
+    opened_at = datetime(2026, 5, 28, 12, 0, 0)
+    maintenance = MaintenanceRecord(
+        id="maintenance-1",
+        vehicle_id="vehicle-1",
+        opened_at=opened_at,
+        reason="fault transition",
+        triggering_event_id="event-1",
+    )
+
+    schema = MaintenanceRecordRead.model_validate(maintenance)
+
+    assert schema.id == "maintenance-1"
+    assert schema.vehicle_id == "vehicle-1"
+    assert schema.opened_at == opened_at
+    assert schema.reason == "fault transition"
+    assert schema.triggering_event_id == "event-1"
