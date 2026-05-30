@@ -22,3 +22,6 @@
    - after editing services the agent, ran the stale tests and tried to edit the services back to pass the tests
    - the agent was defining every time async_sessionmaker inside routes affecting performance , this is a factory and was moved outside
    - the agent was not using a MVC pattern, enforced this pattern for consistency
+     5.2 A 3-5 bullet reflection at the end: what the AI was good at, where it failed you, what you had to double-check manually
+   - the agent was good at writing code and following instructions, it was able to write a lot of code in a short amount of time
+   - the agent was using uv run fastapi and this was not working with the socket io server, i manually changed it to uv run uvicorn

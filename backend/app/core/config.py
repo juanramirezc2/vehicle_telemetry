@@ -7,9 +7,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     project_name: str = "Qualitara API"
     environment: str = "development"
-    # TODO: switch back to localhost when the local Postgres port conflict is removed.
     database_url: str = Field(
-        default="postgresql+asyncpg://qualitara:qualitara@192.168.97.2:5432/qualitara"
+        default="postgresql+asyncpg://qualitara:qualitara@localhost:5432/qualitara"
     )
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
