@@ -13,3 +13,12 @@
 - we should probably consider a caching layer if read traffic becomes a bottleneck
 
 4. What did you deliberately leave out, and why?
+
+- i thought about adding a caching layer with redis but i think it would be an overkill for the current requirements.
+
+5. **An AI Interaction Log** — a plain markdown file containing:
+   - [opencode_session_history.md](../opencode_session_history.md)
+     5.1 Corrections or redirections you made when the AI got it wrong
+   - after editing services the agent, ran the stale tests and tried to edit the services back to pass the tests
+   - the agent was defining every time async_sessionmaker inside routes affecting performance , this is a factory and was moved outside
+   - the agent was not using a MVC pattern, enforced this pattern for consistency
