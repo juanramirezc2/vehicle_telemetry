@@ -2,7 +2,6 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.database import get_session
@@ -58,9 +57,7 @@ async def create_telemetry_event(
     socketio_server = getattr(request.app.state, "socketio", None)
     if socketio_server is not None:
         telemetry_payload = response.model_dump(mode="json")
-        await socketio_server.emit(
-            "telemetry:created", telemetry_payload
-        )
+        await socketio_server.emit("telemetry:created", telemetry_payload)
         if payload.zone_entered is not None:
             await socketio_server.emit(
                 "zones:count_changed",
