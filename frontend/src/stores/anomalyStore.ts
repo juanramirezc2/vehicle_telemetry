@@ -22,6 +22,7 @@ type AnomalyStore = {
   state: LoadState;
   error: string | null;
   fetchAnomalies: (limit?: number) => Promise<void>;
+  upsertAnomaly: (anomaly: Anomaly) => void;
 };
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
@@ -48,5 +49,20 @@ export const useAnomalyStore = create<AnomalyStore>((set) => ({
         error: error instanceof Error ? error.message : "Failed to load anomalies",
       });
     }
+  },
+  upsertAnomaly(anomaly) {
+    set((store) => {
+      const existingIndex = store.anomalies.findIndex(
+        (currentAnomaly) => currentAnomaly.vehicle_id === anomaly.vehicle_id,
+      );
+
+      if (existingIndex === -1) {
+        return { anomalies: [anomaly, ...store.anomalies] };
+      }
+
+      const anomalies = [...store.anomalies];
+      anomalies[existingIndex] = anomaly;
+      return { anomalies };
+    });
   },
 }));

@@ -1,28 +1,6 @@
-import { useEffect, useState } from "react";
-import { io, type Socket } from "socket.io-client";
+import { useEffect } from "react";
+import { useDashboardSocket } from "./hooks/useDashboardSocket";
 import { useAnomalyStore } from "./stores/anomalyStore";
-
-type ServiceState = "checking" | "online" | "offline";
-
-type ServiceStatus = {
-  label: string;
-  path: string;
-  state: ServiceState;
-};
-
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
-const SOCKET_PATH = "/dashboard.io";
-
-const initialStatuses: ServiceStatus[] = [
-  { label: "API", path: "/api/health", state: "checking" },
-  { label: "Postgres", path: "/api/health/db", state: "checking" },
-  { label: "Redis", path: "/api/health/redis", state: "checking" },
-  { label: "Socket.IO", path: SOCKET_PATH, state: "checking" },
-];
-
-const healthStatuses = initialStatuses.filter(
-  (service) => service.path !== SOCKET_PATH,
-);
 
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat(undefined, {
@@ -35,81 +13,12 @@ function formatReason(reason: string) {
   return reason.replaceAll("_", " ");
 }
 
-async function checkService(path: string): Promise<ServiceState> {
-  try {
-    const response = await fetch(`${API_URL}${path}`);
-    return response.ok ? "online" : "offline";
-  } catch {
-    return "offline";
-  }
-}
-
 export default function App() {
-  const [statuses, setStatuses] = useState<ServiceStatus[]>(initialStatuses);
-  const [socketState, setSocketState] = useState<ServiceState>("checking");
+  useDashboardSocket();
   const anomalies = useAnomalyStore((store) => store.anomalies);
   const anomalyState = useAnomalyStore((store) => store.state);
   const anomalyError = useAnomalyStore((store) => store.error);
   const fetchAnomalies = useAnomalyStore((store) => store.fetchAnomalies);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadStatuses() {
-      const nextStatuses = await Promise.all(
-        healthStatuses.map(async (service) => ({
-          ...service,
-          state: await checkService(service.path),
-        })),
-      );
-
-      if (isMounted) {
-        setStatuses([
-          ...nextStatuses,
-          { label: "Socket.IO", path: SOCKET_PATH, state: socketState },
-        ]);
-      }
-    }
-
-    loadStatuses();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    const socket: Socket = io(API_URL, {
-      path: SOCKET_PATH,
-      transports: ["websocket"],
-    });
-
-    socket.on("connect", () => {
-      setSocketState("online");
-    });
-
-    socket.on("connect_error", () => {
-      setSocketState("offline");
-    });
-
-    socket.on("disconnect", () => {
-      setSocketState("offline");
-    });
-
-    return () => {
-      socket.disconnect();
-    };
-  }, []);
-
-  useEffect(() => {
-    setStatuses((currentStatuses) =>
-      currentStatuses.map((service) =>
-        service.path === SOCKET_PATH
-          ? { ...service, state: socketState }
-          : service,
-      ),
-    );
-  }, [socketState]);
 
   useEffect(() => {
     fetchAnomalies(50);
@@ -119,51 +28,25 @@ export default function App() {
     <main className="min-h-screen bg-slate-950 px-4 py-8 text-slate-100 sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-7xl flex-col gap-8">
         <section className="overflow-hidden rounded-3xl border border-white/10 bg-[radial-gradient(circle_at_top_left,_rgba(20,184,166,0.22),_transparent_36%),linear-gradient(135deg,_rgba(15,23,42,0.96),_rgba(30,41,59,0.92))] p-6 shadow-2xl shadow-cyan-950/30 sm:p-8">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-3xl">
-              <p className="text-sm font-semibold uppercase tracking-[0.35em] text-cyan-300">
-                Qualitara Fleet Ops
-              </p>
-              <h1 className="mt-4 text-4xl font-black tracking-tight text-white sm:text-6xl">
-                Anomaly dashboard
-              </h1>
-              <p className="mt-4 max-w-2xl text-base leading-7 text-slate-300">
-                Monitor derived telemetry anomalies from low battery and
-                overspeed events. Data is loaded from the FastAPI anomaly
-                endpoint.
-              </p>
-            </div>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:min-w-[520px]">
-              {statuses.map((service) => (
-                <article
-                  className="rounded-2xl border border-white/10 bg-white/[0.06] p-4 shadow-lg shadow-black/10 backdrop-blur"
-                  key={service.path}
-                >
-                  <p className="text-xs font-medium text-slate-400">
-                    {service.label}
-                  </p>
-                  <p
-                    className={`mt-3 inline-flex rounded-full px-2.5 py-1 text-xs font-bold uppercase tracking-wide ${
-                      service.state === "online"
-                        ? "bg-emerald-400/15 text-emerald-300"
-                        : service.state === "offline"
-                          ? "bg-rose-400/15 text-rose-300"
-                          : "bg-slate-400/15 text-slate-300"
-                    }`}
-                  >
-                    {service.state}
-                  </p>
-                </article>
-              ))}
-            </div>
+          <div className="max-w-3xl">
+            <p className="text-sm font-semibold uppercase tracking-[0.35em] text-cyan-300">
+              Qualitara Fleet Ops
+            </p>
+            <h1 className="mt-4 text-4xl font-black tracking-tight text-white sm:text-6xl">
+              Anomaly dashboard
+            </h1>
+            <p className="mt-4 max-w-2xl text-base leading-7 text-slate-300">
+              Monitor derived telemetry anomalies from low battery and overspeed
+              events. Data is loaded from the FastAPI anomaly endpoint.
+            </p>
           </div>
         </section>
 
         <section className="rounded-3xl border border-slate-200 bg-white text-slate-950 shadow-xl shadow-slate-950/10">
           <div className="flex flex-col gap-4 border-b border-slate-200 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
-            <div>
+            <div className="max-w-3xl">
               <p className="text-sm font-semibold uppercase tracking-[0.25em] text-cyan-700">
-                Latest 25
+                Latest 50
               </p>
               <h2 className="mt-2 text-2xl font-black tracking-tight">
                 Telemetry anomalies
