@@ -5,22 +5,25 @@ from uuid import UUID
 from fastapi.testclient import TestClient
 from backend.app.core.database import get_session
 from backend.app.main import create_app
-from backend.app.models import TelemetryEvent
+from backend.app.models import MaintenanceRecord, TelemetryEvent, Vehicle
 from backend.app.realtime import create_asgi_app
 from backend.app.services.telemetry_service import InvalidVehicleError
 
 
 class FakeResult:
-    def __init__(self, rows: list[TelemetryEvent], scalar: TelemetryEvent | None = None) -> None:
+    def __init__(self, rows: list[object], scalar: object | None = None) -> None:
         self.rows = rows
         self.scalar = scalar
 
-    def scalars(self) -> list[TelemetryEvent]:
+    def scalars(self) -> list[object]:
         return self.rows
 
-    def scalar_one(self) -> TelemetryEvent:
+    def scalar_one(self) -> object:
         if self.scalar is None:
             raise AssertionError("Expected scalar result")
+        return self.scalar
+
+    def scalar_one_or_none(self) -> object | None:
         return self.scalar
 
 
@@ -39,15 +42,32 @@ class FakeSession:
         execute_rows: list[TelemetryEvent] | None = None,
         inserted_battery_pct: float = 78,
         inserted_speed_mps: float = 1.2,
+        inserted_status: str = "moving",
         inserted_zone_entered: str | None = None,
+        vehicle_status: str | None = "moving",
         fail_commit: bool = False,
     ) -> None:
         self.execute_rows = execute_rows or []
         self.inserted_battery_pct = inserted_battery_pct
         self.inserted_speed_mps = inserted_speed_mps
+        self.inserted_status = inserted_status
         self.inserted_zone_entered = inserted_zone_entered
+        self.vehicle = (
+            Vehicle(
+                id="v-12",
+                status=vehicle_status,
+                battery=78,
+                current_zone=None,
+                updated_at=datetime(2026, 5, 28, 12, 0, 0),
+            )
+            if vehicle_status is not None
+            else None
+        )
         self.fail_commit = fail_commit
         self.added: TelemetryEvent | None = None
+        self.maintenance_records: list[MaintenanceRecord] = []
+        self.cancelled_active_missions = 0
+        self.locked_vehicle = False
         self.rolled_back = False
 
     async def execute(self, statement: object) -> FakeResult:
@@ -59,6 +79,7 @@ class FakeSession:
                 "timestamp": datetime(2026, 5, 28, 12, 0, 0, 740000),
                 "battery_pct": self.inserted_battery_pct,
                 "speed_mps": self.inserted_speed_mps,
+                "status": self.inserted_status,
                 "zone_entered": self.inserted_zone_entered,
             }
             telemetry = TelemetryEvent(
@@ -69,13 +90,29 @@ class FakeSession:
             self.added = telemetry
             return FakeResult([], scalar=telemetry)
 
+        table_names = [table.name for table in getattr(statement, "columns_clause_froms", [])]
+        if "vehicles" in table_names:
+            statement_text = str(statement)
+            self.locked_vehicle = "FOR UPDATE" in statement_text.upper()
+            return FakeResult([], scalar=self.vehicle)
+
+        if hasattr(statement, "is_update") and statement.is_update:
+            statement_text = str(statement)
+            if "missions" in statement_text:
+                self.cancelled_active_missions += 1
+            return FakeResult([])
+
         return FakeResult(self.execute_rows)
 
     def begin(self) -> FakeTransaction:
         return FakeTransaction()
 
-    def add(self, telemetry: TelemetryEvent) -> None:
-        self.added = telemetry
+    def add(self, item: object) -> None:
+        if isinstance(item, MaintenanceRecord):
+            self.maintenance_records.append(item)
+            return
+
+        self.added = item
 
     async def commit(self) -> None:
         if self.fail_commit:
@@ -264,6 +301,37 @@ def test_create_telemetry_event_broadcasts_created_event() -> None:
             },
         )
     ]
+
+
+def test_create_fault_telemetry_cancels_mission_and_opens_maintenance() -> None:
+    session = FakeSession(inserted_status="fault")
+    client = make_client(session)
+    payload = valid_payload() | {"status": "fault", "error_codes": ["E_NAV_LOST"]}
+
+    response = client.post("/api/telemetry", json=payload)
+
+    assert response.status_code == 201
+    assert session.locked_vehicle is True
+    assert session.vehicle is not None
+    assert session.vehicle.status == "fault"
+    assert session.cancelled_active_missions == 1
+    assert len(session.maintenance_records) == 1
+    assert session.maintenance_records[0].vehicle_id == "v-12"
+    assert session.maintenance_records[0].reason == "fault telemetry event"
+    assert session.maintenance_records[0].triggering_event_id == response.json()["id"]
+
+
+def test_create_fault_telemetry_is_idempotent_when_vehicle_already_fault() -> None:
+    session = FakeSession(inserted_status="fault", vehicle_status="fault")
+    client = make_client(session)
+    payload = valid_payload() | {"status": "fault"}
+
+    response = client.post("/api/telemetry", json=payload)
+
+    assert response.status_code == 201
+    assert session.locked_vehicle is True
+    assert session.cancelled_active_missions == 0
+    assert session.maintenance_records == []
 
 
 def test_create_telemetry_event_broadcasts_low_battery_anomaly() -> None:

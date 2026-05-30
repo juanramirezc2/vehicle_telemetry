@@ -3,6 +3,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.models import TelemetryEvent, ZoneCounter
 from backend.app.schemas.telemetry import TelemetryEventCreate, TelemetryEventRead
+from backend.app.services.vehicle_service import (
+    VehicleNotFoundError,
+    apply_status_change,
+)
 
 
 class InvalidVehicleError(Exception):
@@ -31,6 +35,18 @@ async def ingest_telemetry(
             .returning(TelemetryEvent)
         )
         stored = result.scalar_one()
+
+        if event.status == "fault":
+            try:
+                await apply_status_change(
+                    session,
+                    event.vehicle_id,
+                    "fault",
+                    reason="fault telemetry event",
+                    triggering_event_id=stored.id,
+                )
+            except VehicleNotFoundError as exc:
+                raise InvalidVehicleError from exc
 
         # zone crossing
         if event.zone_entered is not None:
