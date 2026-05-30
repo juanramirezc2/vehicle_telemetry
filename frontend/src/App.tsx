@@ -1,6 +1,16 @@
 import { useEffect } from "react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { useDashboardSocket } from "./hooks/useDashboardSocket";
 import { useAnomalyStore } from "./stores/anomalyStore";
+import { useZonesStore } from "./stores/zonesStore";
 
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat(undefined, {
@@ -19,10 +29,18 @@ export default function App() {
   const anomalyState = useAnomalyStore((store) => store.state);
   const anomalyError = useAnomalyStore((store) => store.error);
   const fetchAnomalies = useAnomalyStore((store) => store.fetchAnomalies);
+  const zones = useZonesStore((store) => store.zones);
+  const zonesState = useZonesStore((store) => store.state);
+  const zonesError = useZonesStore((store) => store.error);
+  const fetchZones = useZonesStore((store) => store.fetchZones);
 
   useEffect(() => {
     fetchAnomalies(50);
   }, [fetchAnomalies]);
+
+  useEffect(() => {
+    fetchZones();
+  }, [fetchZones]);
 
   return (
     <main className="min-h-screen bg-slate-950 px-4 py-8 text-slate-100 sm:px-6 lg:px-8">
@@ -71,10 +89,6 @@ export default function App() {
                 <tr>
                   <th className="px-5 py-4 font-bold">Vehicle</th>
                   <th className="px-5 py-4 font-bold">Reasons</th>
-                  <th className="px-5 py-4 font-bold">Battery</th>
-                  <th className="px-5 py-4 font-bold">Speed</th>
-                  <th className="px-5 py-4 font-bold">Status</th>
-                  <th className="px-5 py-4 font-bold">Zone</th>
                   <th className="px-5 py-4 font-bold">Timestamp</th>
                 </tr>
               </thead>
@@ -99,18 +113,6 @@ export default function App() {
                         ))}
                       </div>
                     </td>
-                    <td className="whitespace-nowrap px-5 py-4 font-semibold text-slate-700">
-                      {anomaly.battery_pct.toFixed(1)}%
-                    </td>
-                    <td className="whitespace-nowrap px-5 py-4 font-semibold text-slate-700">
-                      {anomaly.speed_mps.toFixed(1)} m/s
-                    </td>
-                    <td className="whitespace-nowrap px-5 py-4 text-slate-600">
-                      {anomaly.status}
-                    </td>
-                    <td className="whitespace-nowrap px-5 py-4 text-slate-600">
-                      {anomaly.zone_entered ?? "none"}
-                    </td>
                     <td className="whitespace-nowrap px-5 py-4 text-slate-600">
                       {formatDateTime(anomaly.timestamp)}
                     </td>
@@ -128,6 +130,64 @@ export default function App() {
           {anomalyState === "loading" ? (
             <div className="p-10 text-center text-slate-500">
               Loading anomaly data...
+            </div>
+          ) : null}
+        </section>
+
+        <section className="rounded-3xl border border-slate-200 bg-white text-slate-950 shadow-xl shadow-slate-950/10">
+          <div className="flex flex-col gap-4 border-b border-slate-200 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+            <div className="max-w-3xl">
+              <p className="text-sm font-semibold uppercase tracking-[0.25em] text-cyan-700">
+                Zone entries
+              </p>
+              <h2 className="mt-2 text-2xl font-black tracking-tight">
+                Entry count by zone
+              </h2>
+            </div>
+            <div className="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">
+              {zonesState === "loading" ? "Loading zones" : `${zones.length} zones`}
+            </div>
+          </div>
+
+          {zonesState === "error" ? (
+            <div className="m-6 rounded-2xl border border-rose-200 bg-rose-50 p-5 text-rose-800">
+              {zonesError}
+            </div>
+          ) : null}
+
+          <div className="h-[420px] p-5 sm:p-6">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={zones} margin={{ top: 8, right: 16, left: 0, bottom: 80 }}>
+                <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" vertical={false} />
+                <XAxis
+                  dataKey="zone_id"
+                  angle={-40}
+                  axisLine={false}
+                  height={88}
+                  interval={0}
+                  tick={{ fill: "#475569", fontSize: 12 }}
+                  tickLine={false}
+                  textAnchor="end"
+                />
+                <YAxis
+                  allowDecimals={false}
+                  axisLine={false}
+                  tick={{ fill: "#475569", fontSize: 12 }}
+                  tickLine={false}
+                />
+                <Tooltip
+                  cursor={{ fill: "rgba(14, 165, 233, 0.08)" }}
+                  formatter={(value) => [value, "entry_count"]}
+                  labelFormatter={(label) => `zone_id: ${label}`}
+                />
+                <Bar dataKey="entry_count" fill="#0891b2" radius={[8, 8, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {zonesState === "success" && zones.length === 0 ? (
+            <div className="p-10 text-center text-slate-500">
+              No zone entry counts have been reported yet.
             </div>
           ) : null}
         </section>

@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from backend.app.api.health import router as health_router
 from backend.app.api.routes.anomalies import router as anomalies_router
 from backend.app.api.routes.telemetry import router as telemetry_router
+from backend.app.api.routes.zones import router as zones_router
 from backend.app.core.config import Settings, get_settings
 from backend.app.core.database import SessionLocal
 from backend.app.realtime import create_asgi_app
@@ -63,6 +64,7 @@ def create_app(
     app.include_router(health_router, prefix="/api")
     app.include_router(anomalies_router, prefix="/api")
     app.include_router(telemetry_router, prefix="/api")
+    app.include_router(zones_router, prefix="/api")
 
     @app.get("/")
     async def root() -> dict[str, Any]:
