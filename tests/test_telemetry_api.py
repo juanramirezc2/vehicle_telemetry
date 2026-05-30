@@ -3,6 +3,8 @@ from datetime import datetime
 from uuid import UUID
 
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import IntegrityError
+
 from backend.app.core.database import get_session
 from backend.app.main import create_app
 from backend.app.models import MaintenanceRecord, TelemetryEvent, Vehicle

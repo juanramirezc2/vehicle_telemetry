@@ -11,11 +11,6 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from backend.app.core.config import get_settings
 from backend.app.models import (
     Base,
-    MaintenanceRecord,
-    Mission,
-    TelemetryEvent,
-    Vehicle,
-    ZoneCounter,
 )
 
 config = context.config
