@@ -23,11 +23,13 @@ Start Postgres:
 docker compose up -d postgres
 ```
 
-Run migrations and seed local vehicles:
+Run migrations and seed local data:
 
 ```bash
 uv run alembic upgrade head
 uv run python -m backend.app.seed_vehicles
+uv run python -m backend.app.seed_zones
+uv run python -m backend.app.seed_telemetry
 ```
 
 Start the API:
