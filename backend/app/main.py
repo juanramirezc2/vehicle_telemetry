@@ -4,7 +4,6 @@ from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from backend.app.api.health import router as health_router
@@ -15,7 +14,7 @@ from backend.app.api.routes.zones import router as zones_router
 from backend.app.core.config import Settings, get_settings
 from backend.app.core.database import SessionLocal
 from backend.app.realtime import create_asgi_app
-from backend.app.services.health import check_database, check_redis
+from backend.app.services.health import check_database
 
 HealthCheck = Callable[[FastAPI], Awaitable[None]]
 
@@ -24,7 +23,6 @@ def create_app(
     *,
     settings: Settings | None = None,
     database_check: HealthCheck = check_database,
-    redis_check: HealthCheck = check_redis,
     enable_lifespan: bool = True,
 ) -> FastAPI:
     app_settings = settings or get_settings()
@@ -42,17 +40,14 @@ def create_app(
             pool_pre_ping=True,
         )
         SessionLocal.configure(bind=app.state.db_engine)
-        app.state.redis = Redis.from_url(app_settings.redis_url, decode_responses=True)
         try:
             yield
         finally:
-            await app.state.redis.aclose()
             await app.state.db_engine.dispose()
 
     app = FastAPI(title=app_settings.project_name, lifespan=lifespan)
     app.state.settings = app_settings
     app.state.database_check = database_check
-    app.state.redis_check = redis_check
 
     app.add_middleware(
         CORSMiddleware,

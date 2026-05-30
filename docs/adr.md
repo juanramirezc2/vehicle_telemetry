@@ -10,4 +10,6 @@
 3. What would need to change if scale grew significantly? You define "significantly.”
 
 - pool size and max overflow
-- we should probably consider a caching layer like redis
+- we should probably consider a caching layer if read traffic becomes a bottleneck
+
+4. What did you deliberately leave out, and why?

@@ -8,15 +8,19 @@ Modern FastAPI + React TypeScript fleet dashboard for vehicles telemetry.
 
 - FastAPI backend managed with `uv`
 - React TypeScript frontend built with Vite
-- PostgreSQL and Redis for local development through Docker Compose
+- PostgreSQL for local development through Docker Compose
 - SQLAlchemy and Alembic for database access and migrations
+
+## Agentic Session History
+
+See [opencode_session_history.md](opencode_session_history.md) for the development session log.
 
 ## Quick Start
 
-Start Postgres and Redis:
+Start Postgres:
 
 ```bash
-docker compose up -d postgres redis
+docker compose up -d postgres
 ```
 
 Run migrations and seed local vehicles:
@@ -54,7 +58,6 @@ Copy `frontend/.env.example` to `frontend/.env` for frontend settings.
 - `GET /` - API metadata
 - `GET /api/health` - application health
 - `GET /api/health/db` - PostgreSQL health
-- `GET /api/health/redis` - Redis health
 
 ## Migrations
 
@@ -84,7 +87,3 @@ Build the frontend:
 cd frontend
 npm run build
 ```
-
-## Session History
-
-See [opencode_session_history.md](opencode_session_history.md) for the development session log.

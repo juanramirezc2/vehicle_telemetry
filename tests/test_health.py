@@ -60,25 +60,3 @@ def test_database_health_failure() -> None:
 
     assert response.status_code == 503
     assert response.json() == {"detail": "Database health check failed"}
-
-
-def test_redis_health_success() -> None:
-    client = TestClient(
-        create_app(redis_check=passing_check, enable_lifespan=False)
-    )
-
-    response = client.get("/api/health/redis")
-
-    assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
-
-
-def test_redis_health_failure() -> None:
-    client = TestClient(
-        create_app(redis_check=failing_check, enable_lifespan=False)
-    )
-
-    response = client.get("/api/health/redis")
-
-    assert response.status_code == 503
-    assert response.json() == {"detail": "Redis health check failed"}
