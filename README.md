@@ -2,6 +2,8 @@
 
 Modern FastAPI + React TypeScript fleet dashboard for vehicles telemetry.
 
+![Fleet dashboard demo](dashboard.gif)
+
 ## Stack
 
 - FastAPI backend managed with `uv`
