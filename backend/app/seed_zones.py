@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+import random
+from datetime import datetime, timedelta, timezone
 from typing import Any, get_args
 
 from sqlalchemy.dialects.postgresql import insert
@@ -14,14 +15,20 @@ from backend.app.schemas.types import ZoneEntered
 ZONES = list(get_args(ZoneEntered))
 
 
-def build_seed_zones(*, updated_at: datetime | None = None) -> list[dict[str, Any]]:
-    timestamp = updated_at or datetime.now(timezone.utc).replace(tzinfo=None)
+def build_seed_zones(
+    *,
+    now: datetime | None = None,
+    rng: random.Random | None = None,
+) -> list[dict[str, Any]]:
+    generator = rng or random.Random()
+    reference = now or datetime.now(timezone.utc).replace(tzinfo=None)
 
     return [
         {
             "zone_id": zone,
-            "entry_count": 0,
-            "updated_at": timestamp,
+            "entry_count": generator.randint(0, 500),
+            "updated_at": reference
+            - timedelta(seconds=generator.randint(0, 24 * 60 * 60)),
         }
         for zone in ZONES
     ]
@@ -34,6 +41,7 @@ async def seed_zones() -> int:
     update_statement = statement.on_conflict_do_update(
         index_elements=[ZoneCounter.zone_id],
         set_={
+            "entry_count": statement.excluded.entry_count,
             "updated_at": statement.excluded.updated_at,
         },
     )
