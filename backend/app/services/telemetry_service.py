@@ -1,6 +1,9 @@
-from sqlalchemy import insert, update, func
-from sqlalchemy.ext.asyncio import AsyncSession
 from typing import NamedTuple
+from uuid import uuid4
+
+from sqlalchemy import func, insert, select, update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.models import TelemetryEvent, Vehicle, ZoneCounter
 from backend.app.schemas.telemetry import TelemetryEventCreate, TelemetryEventRead
@@ -34,18 +37,28 @@ async def ingest_telemetry(
     same zone serialize correctly without losing entries.
     """
     changed_vehicle: Vehicle | None = None
+    telemetry_id = str(uuid4())
 
-    async with session.begin():
-        # 1. Insert the telemetry event, get the stored row back.
-        result = await session.execute(
-            insert(TelemetryEvent)
-            .values(**event.model_dump())
-            .returning(TelemetryEvent)
-        )
-        stored = result.scalar_one()
+    try:
+        async with session.begin():
+            if event.status == "fault":
+                result = await session.execute(
+                    select(Vehicle.id)
+                    .where(Vehicle.id == event.vehicle_id)
+                    .with_for_update()
+                )
+                if result.scalar_one_or_none() is None:
+                    raise InvalidVehicleError
 
-        if event.status == "fault":
-            try:
+            # 1. Insert the telemetry event, get the stored row back.
+            result = await session.execute(
+                insert(TelemetryEvent)
+                .values(id=telemetry_id, **event.model_dump())
+                .returning(TelemetryEvent)
+            )
+            stored = result.scalar_one()
+
+            if event.status == "fault":
                 changed_vehicle = await apply_status_change(
                     session,
                     event.vehicle_id,
@@ -53,19 +66,19 @@ async def ingest_telemetry(
                     reason="fault telemetry event",
                     triggering_event_id=stored.id,
                 )
-            except VehicleNotFoundError as exc:
-                raise InvalidVehicleError from exc
 
-        # zone crossing
-        if event.zone_entered is not None:
-            await session.execute(
-                update(ZoneCounter)
-                .where(ZoneCounter.zone_id == event.zone_entered)
-                .values(
-                    entry_count=ZoneCounter.entry_count + 1,
-                    updated_at=func.now(),
+            # zone crossing
+            if event.zone_entered is not None:
+                await session.execute(
+                    update(ZoneCounter)
+                    .where(ZoneCounter.zone_id == event.zone_entered)
+                    .values(
+                        entry_count=ZoneCounter.entry_count + 1,
+                        updated_at=func.now(),
+                    )
                 )
-            )
+    except (IntegrityError, VehicleNotFoundError) as exc:
+        raise InvalidVehicleError from exc
 
     return TelemetryIngestResult(
         telemetry=TelemetryEventRead.model_validate(stored),

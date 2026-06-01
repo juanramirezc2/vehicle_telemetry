@@ -78,7 +78,7 @@ async def test_concurrent_zone_crossings():
         tasks = []
         for i in range(n_vehicles):
             payload = make_telemetry(
-                vehicle_id=f"v-{(i % 50) + 1:02d}",
+                vehicle_id=f"v-{(i % 50) + 1}",
                 status="charging",
                 zone_entered=zone,
                 battery_pct=float(20 + i),
@@ -124,7 +124,7 @@ async def test_concurrent_telemetry_burst():
         tasks = []
         for i in range(n_vehicles):
             payload = make_telemetry(
-                vehicle_id=f"v-{(i % 50) + 1:02d}",
+                vehicle_id=f"v-{(i % 50) + 1}",
                 status="moving",
                 battery_pct=float(100 - i),
             )
@@ -178,6 +178,7 @@ async def test_concurrent_fault_transitions():
 
     successes = sum(1 for r in results if isinstance(r, httpx.Response) and r.status_code == 201)
     print(f"Fault events accepted: {successes}/{n_faults}")
+    assert successes == n_faults, f"Expected {n_faults} fault events accepted, got {successes}"
 
     # Verify vehicle is in fault state
     async with httpx.AsyncClient() as client:
@@ -204,7 +205,7 @@ async def test_fleet_state_consistency():
 
     async def write_telemetry(client: httpx.AsyncClient, idx: int):
         payload = make_telemetry(
-            vehicle_id=f"v-{(idx % 50) + 1:02d}",
+            vehicle_id=f"v-{(idx % 50) + 1}",
             status=["moving", "idle", "charging"][idx % 3],
             zone_entered=["aisle_a", "aisle_b", "charging_bay_1"][idx % 3] if idx % 4 == 0 else None,
         )
