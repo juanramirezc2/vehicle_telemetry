@@ -100,6 +100,29 @@ Run backend tests:
 uv run pytest
 ```
 
+Run the live API concurrency tests:
+
+```bash
+uv run python tests/test_concurrency.py
+```
+
+These tests require the local Postgres database and FastAPI server to be running first:
+
+```bash
+docker compose up -d postgres
+uv run alembic upgrade head
+uv run python -m backend.app.seed_vehicles
+uv run python -m backend.app.seed_zones
+uv run uvicorn backend.app.main:app --reload
+```
+
+The concurrency suite sends real parallel HTTP requests with `httpx.AsyncClient` and validates:
+
+- Zone counter atomicity: 20 vehicles enter the same zone at once, then the zone count must increase by exactly 20.
+- Telemetry burst handling: 50 concurrent telemetry writes must all return `201 Created`.
+- Fault transition safety: 10 concurrent fault events for the same vehicle must all be accepted while the vehicle ends in `fault` state without deadlocking.
+- Fleet state consistency: vehicle reads are interleaved with writes and each response must remain internally consistent.
+
 Run Python lint checks:
 
 ```bash
