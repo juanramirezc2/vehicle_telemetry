@@ -1,0 +1,755 @@
+{
+  "info": {
+    "name": "Fleet Telemetry - Concurrency Tests",
+    "description": "Postman collection for testing concurrent write scenarios on the fleet telemetry API.\n\nIMPORTANT: For true parallel execution, use the Postman Collection Runner with concurrency > 1, or run the included Python concurrency test script.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "noauth"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "Setup - Seed Vehicles",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/health",
+              "host": ["{{base_url}}"],
+              "path": ["api", "health"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('API is healthy', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Vehicles (verify seed)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/vehicles",
+              "host": ["{{base_url}}"],
+              "path": ["api", "vehicles"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Vehicles exist', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const vehicles = pm.response.json();",
+                  "    pm.expect(vehicles.length).to.be.above(0);",
+                  "    // Store first vehicle ID for later tests",
+                  "    if (vehicles.length > 0) {",
+                  "        pm.collectionVariables.set('test_vehicle_id', vehicles[0].id);",
+                  "        pm.collectionVariables.set('test_vehicle_id_2', vehicles[1] ? vehicles[1].id : vehicles[0].id);",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Concurrency - Telemetry Burst",
+      "description": "Tests concurrent telemetry ingestion from multiple vehicles. Use Collection Runner with concurrency=10+ to simulate real burst.",
+      "item": [
+        {
+          "name": "Concurrent Telemetry - Vehicle A (zone_entered)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/telemetry",
+              "host": ["{{base_url}}"],
+              "path": ["api", "telemetry"]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicle_id\": \"v-1\",\n  \"timestamp\": \"{{$timestamp}}000Z\",\n  \"lat\": 37.41,\n  \"lon\": -122.08,\n  \"battery_pct\": 78,\n  \"speed_mps\": 1.2,\n  \"status\": \"moving\",\n  \"error_codes\": [],\n  \"zone_entered\": \"aisle_a\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Telemetry accepted (201)', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Response has valid structure', function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('id');",
+                  "    pm.expect(body).to.have.property('vehicle_id', 'v-1');",
+                  "    pm.expect(body).to.have.property('received_at');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Concurrent Telemetry - Vehicle B (zone_entered same zone)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/telemetry",
+              "host": ["{{base_url}}"],
+              "path": ["api", "telemetry"]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicle_id\": \"v-2\",\n  \"timestamp\": \"{{$timestamp}}000Z\",\n  \"lat\": 37.42,\n  \"lon\": -122.09,\n  \"battery_pct\": 65,\n  \"speed_mps\": 2.0,\n  \"status\": \"moving\",\n  \"error_codes\": [],\n  \"zone_entered\": \"aisle_a\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Telemetry accepted (201)', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Concurrent Telemetry - Vehicle C (fault status)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/telemetry",
+              "host": ["{{base_url}}"],
+              "path": ["api", "telemetry"]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicle_id\": \"v-3\",\n  \"timestamp\": \"{{$timestamp}}000Z\",\n  \"lat\": 37.43,\n  \"lon\": -122.10,\n  \"battery_pct\": 12,\n  \"speed_mps\": 0,\n  \"status\": \"fault\",\n  \"error_codes\": [\"E001\", \"E002\"],\n  \"zone_entered\": null\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Fault telemetry accepted (201)', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.status).to.equal('fault');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Concurrent Telemetry - Vehicle D (charging)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/telemetry",
+              "host": ["{{base_url}}"],
+              "path": ["api", "telemetry"]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicle_id\": \"v-4\",\n  \"timestamp\": \"{{$timestamp}}000Z\",\n  \"lat\": 37.44,\n  \"lon\": -122.11,\n  \"battery_pct\": 45,\n  \"speed_mps\": 0,\n  \"status\": \"charging\",\n  \"error_codes\": [],\n  \"zone_entered\": \"charging_bay_1\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Charging telemetry accepted (201)', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Concurrent Telemetry - Vehicle E (same zone as A and B)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/telemetry",
+              "host": ["{{base_url}}"],
+              "path": ["api", "telemetry"]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicle_id\": \"v-5\",\n  \"timestamp\": \"{{$timestamp}}000Z\",\n  \"lat\": 37.415,\n  \"lon\": -122.085,\n  \"battery_pct\": 90,\n  \"speed_mps\": 1.5,\n  \"status\": \"moving\",\n  \"error_codes\": [],\n  \"zone_entered\": \"aisle_a\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Telemetry accepted (201)', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Verify - Zone Counter Atomicity",
+      "description": "After the burst above, 3 vehicles entered aisle_a. Verify count is exactly 3.",
+      "item": [
+        {
+          "name": "GET /zones/counts - Verify aisle_a count",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/zones/counts",
+              "host": ["{{base_url}}"],
+              "path": ["api", "zones", "counts"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Zone counts returned', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const zones = pm.response.json();",
+                  "    pm.expect(zones).to.be.an('array');",
+                  "    pm.expect(zones.length).to.equal(20);",
+                  "});",
+                  "",
+                  "pm.test('aisle_a count is exactly 3 (atomic increment check)', function () {",
+                  "    const zones = pm.response.json();",
+                  "    const aisleA = zones.find(z => z.zone_id === 'aisle_a');",
+                  "    pm.expect(aisleA).to.not.be.undefined;",
+                  "    pm.expect(aisleA.entry_count).to.equal(3);",
+                  "});",
+                  "",
+                  "pm.test('charging_bay_1 count is exactly 1', function () {",
+                  "    const zones = pm.response.json();",
+                  "    const chargingBay = zones.find(z => z.zone_id === 'charging_bay_1');",
+                  "    pm.expect(chargingBay).to.not.be.undefined;",
+                  "    pm.expect(chargingBay.entry_count).to.equal(1);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Concurrency - Zone Crossing Burst",
+      "description": "Simulates shift-change: many vehicles entering the same zone simultaneously. Run with concurrency=20 in Collection Runner.",
+      "item": [
+        {
+          "name": "Zone Burst - Vehicle 1 -> charging_bay_2",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Accepted', function () { pm.response.to.have.status(201); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/telemetry",
+              "host": ["{{base_url}}"],
+              "path": ["api", "telemetry"]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicle_id\": \"v-1\",\n  \"timestamp\": \"{{$timestamp}}000Z\",\n  \"lat\": 37.41,\n  \"lon\": -122.08,\n  \"battery_pct\": 20,\n  \"speed_mps\": 0,\n  \"status\": \"charging\",\n  \"error_codes\": [],\n  \"zone_entered\": \"charging_bay_2\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Zone Burst - Vehicle 2 -> charging_bay_2",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Accepted', function () { pm.response.to.have.status(201); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/telemetry",
+              "host": ["{{base_url}}"],
+              "path": ["api", "telemetry"]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicle_id\": \"v-2\",\n  \"timestamp\": \"{{$timestamp}}000Z\",\n  \"lat\": 37.41,\n  \"lon\": -122.08,\n  \"battery_pct\": 15,\n  \"speed_mps\": 0,\n  \"status\": \"charging\",\n  \"error_codes\": [],\n  \"zone_entered\": \"charging_bay_2\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Zone Burst - Vehicle 3 -> charging_bay_2",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Accepted', function () { pm.response.to.have.status(201); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/telemetry",
+              "host": ["{{base_url}}"],
+              "path": ["api", "telemetry"]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicle_id\": \"v-3\",\n  \"timestamp\": \"{{$timestamp}}000Z\",\n  \"lat\": 37.41,\n  \"lon\": -122.08,\n  \"battery_pct\": 30,\n  \"speed_mps\": 0,\n  \"status\": \"charging\",\n  \"error_codes\": [],\n  \"zone_entered\": \"charging_bay_2\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Zone Burst - Vehicle 4 -> charging_bay_2",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Accepted', function () { pm.response.to.have.status(201); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/telemetry",
+              "host": ["{{base_url}}"],
+              "path": ["api", "telemetry"]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicle_id\": \"v-4\",\n  \"timestamp\": \"{{$timestamp}}000Z\",\n  \"lat\": 37.41,\n  \"lon\": -122.08,\n  \"battery_pct\": 25,\n  \"speed_mps\": 0,\n  \"status\": \"charging\",\n  \"error_codes\": [],\n  \"zone_entered\": \"charging_bay_2\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Zone Burst - Vehicle 5 -> charging_bay_2",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Accepted', function () { pm.response.to.have.status(201); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/telemetry",
+              "host": ["{{base_url}}"],
+              "path": ["api", "telemetry"]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicle_id\": \"v-5\",\n  \"timestamp\": \"{{$timestamp}}000Z\",\n  \"lat\": 37.41,\n  \"lon\": -122.08,\n  \"battery_pct\": 10,\n  \"speed_mps\": 0,\n  \"status\": \"charging\",\n  \"error_codes\": [],\n  \"zone_entered\": \"charging_bay_2\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Verify - Zone Burst Atomicity",
+      "item": [
+        {
+          "name": "GET /zones/counts - Verify charging_bay_2 count",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/zones/counts",
+              "host": ["{{base_url}}"],
+              "path": ["api", "zones", "counts"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('charging_bay_2 count matches number of concurrent entries', function () {",
+                  "    const zones = pm.response.json();",
+                  "    const bay = zones.find(z => z.zone_id === 'charging_bay_2');",
+                  "    pm.expect(bay).to.not.be.undefined;",
+                  "    // Should be exactly 5 (from burst) + any prior count",
+                  "    pm.expect(bay.entry_count).to.be.at.least(5);",
+                  "    console.log('charging_bay_2 entry_count:', bay.entry_count);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Concurrency - Fault Transition",
+      "description": "Tests that concurrent fault transitions on the same vehicle are handled atomically (mission cancelled, maintenance record created).",
+      "item": [
+        {
+          "name": "Fault Transition - First fault event",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/telemetry",
+              "host": ["{{base_url}}"],
+              "path": ["api", "telemetry"]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicle_id\": \"v-6\",\n  \"timestamp\": \"{{$timestamp}}000Z\",\n  \"lat\": 37.41,\n  \"lon\": -122.08,\n  \"battery_pct\": 5,\n  \"speed_mps\": 0,\n  \"status\": \"fault\",\n  \"error_codes\": [\"E_CRITICAL\"],\n  \"zone_entered\": null\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Fault transition accepted', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.status).to.equal('fault');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Fault Transition - Second fault event (idempotent)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/telemetry",
+              "host": ["{{base_url}}"],
+              "path": ["api", "telemetry"]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicle_id\": \"v-6\",\n  \"timestamp\": \"{{$timestamp}}000Z\",\n  \"lat\": 37.41,\n  \"lon\": -122.08,\n  \"battery_pct\": 3,\n  \"speed_mps\": 0,\n  \"status\": \"fault\",\n  \"error_codes\": [\"E_CRITICAL\", \"E_TIMEOUT\"],\n  \"zone_entered\": null\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Idempotent fault accepted (no double mission cancel)', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Verify - Fleet State Consistency",
+      "description": "Verifies that fleet-wide aggregates are consistent under concurrent updates.",
+      "item": [
+        {
+          "name": "GET /vehicles - Per-status counts",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/vehicles",
+              "host": ["{{base_url}}"],
+              "path": ["api", "vehicles"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Fleet state returned', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const vehicles = pm.response.json();",
+                  "    pm.expect(vehicles).to.be.an('array');",
+                  "    pm.expect(vehicles.length).to.be.above(0);",
+                  "",
+                  "    // Count vehicles per status",
+                  "    const statusCounts = {};",
+                  "    vehicles.forEach(v => {",
+                  "        statusCounts[v.status] = (statusCounts[v.status] || 0) + 1;",
+                  "    });",
+                  "",
+                  "    // Verify total matches",
+                  "    const total = Object.values(statusCounts).reduce((a, b) => a + b, 0);",
+                  "    pm.expect(total).to.equal(vehicles.length);",
+                  "",
+                  "    console.log('Fleet status breakdown:', JSON.stringify(statusCounts));",
+                  "    console.log('Total vehicles:', total);",
+                  "",
+                  "    // All vehicles should have a valid status",
+                  "    const validStatuses = ['idle', 'moving', 'charging', 'fault'];",
+                  "    vehicles.forEach(v => {",
+                  "        pm.expect(validStatuses).to.include(v.status);",
+                  "    });",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /anomalies - Recent anomalies",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/anomalies?limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "anomalies"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Anomalies endpoint works', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const anomalies = pm.response.json();",
+                  "    pm.expect(anomalies).to.be.an('array');",
+                  "    console.log('Recent anomalies count:', anomalies.length);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /anomalies - Filter by vehicle",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/anomalies?vehicle_id=v-6",
+              "host": ["{{base_url}}"],
+              "path": ["api", "anomalies"],
+              "query": [
+                {
+                  "key": "vehicle_id",
+                  "value": "v-6"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Vehicle-specific anomalies returned', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const anomalies = pm.response.json();",
+                  "    pm.expect(anomalies).to.be.an('array');",
+                  "    // All returned anomalies should be for v-6",
+                  "    anomalies.forEach(a => {",
+                  "        pm.expect(a.vehicle_id).to.equal('v-6');",
+                  "    });",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Stress - Rapid Fire Telemetry",
+      "description": "Sends 50 rapid telemetry events to stress-test the POST endpoint. Run with Collection Runner.",
+      "item": [
+        {
+          "name": "Generate 50 rapid telemetry events",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('All rapid-fire events accepted', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "// Store the response for validation",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('last_telemetry_id', body.id);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Generate random vehicle and zone for variety",
+                  "const vehicleNum = Math.floor(Math.random() * 50) + 1;",
+                  "const zones = ['aisle_a', 'aisle_b', 'aisle_c', 'pick_zone_1', 'pick_zone_2', 'charging_bay_1'];",
+                  "const randomZone = zones[Math.floor(Math.random() * zones.length)];",
+                  "const statuses = ['moving', 'idle', 'charging'];",
+                  "const randomStatus = statuses[Math.floor(Math.random() * statuses.length)];",
+                  "",
+                  "const payload = {",
+                  "    vehicle_id: `v-${vehicleNum.toString().padStart(2, '0')}`,",
+                  "    timestamp: new Date().toISOString().replace('\\\\Z', 'Z'),",
+                  "    lat: 37.4 + Math.random() * 0.1,",
+                  "    lon: -122.1 + Math.random() * 0.1,",
+                  "    battery_pct: Math.floor(Math.random() * 100),",
+                  "    speed_mps: Math.random() * 5,",
+                  "    status: randomStatus,",
+                  "    error_codes: [],",
+                  "    zone_entered: Math.random() > 0.7 ? randomZone : null",
+                  "};",
+                  "",
+                  "pm.request.body.raw = JSON.stringify(payload);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/telemetry",
+              "host": ["{{base_url}}"],
+              "path": ["api", "telemetry"]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

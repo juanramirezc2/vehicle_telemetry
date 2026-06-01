@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     project_name: str = "Qualitara API"
     environment: str = "development"
     database_url: str = Field(
-        default="postgresql+asyncpg://qualitara:qualitara@localhost:5432/qualitara"
+        default="postgresql+asyncpg://qualitara:qualitara@localhost:5433/qualitara"
     )
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
